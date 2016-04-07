@@ -185,7 +185,6 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
   </ItemGroup>
   <ItemGroup>
     <None Include="diabetes.arff" />
-    <None Include="diabetes23.arff" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="data.cpp" />

@@ -17,6 +17,12 @@ __device__ int tid();
 //Can overflow on large numbers and does not work with negatives
 __host__ __device__ int div_round_up(int a, int b);
 
+
+template <typename T>
+thrust::device_ptr<T> dptr(T*d_ptr){
+	return thrust::device_pointer_cast(d_ptr);
+}
+
 struct Timer{
 	size_t start;
 	Timer(){
@@ -29,6 +35,7 @@ struct Timer{
 		return ((double)clock() - start) / CLOCKS_PER_SEC;
 	}
 	void printElapsed(char * label){
+		safe_cuda(cudaDeviceSynchronize());
 		std::cout << label << ": " << elapsed() << "s\n";
 	}
 

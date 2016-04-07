@@ -4,6 +4,7 @@
 #include <thrust/gather.h>
 #include <thrust/sort.h>
 #include <thrust/sequence.h>
+#include <cub/cub.cuh>
 
 __device__ float entropy(int n_a, int n){
 
@@ -16,51 +17,59 @@ __device__ float entropy(int n_a, int n){
 	return -(p_a * std::log2(p_a)) - (p_b * std::log2(p_b));
 }
 
-void calculate_infogain(thrust::device_vector<int >& sample_index, thrust::host_vector<thrust::device_vector<float >> &attributes, thrust::device_vector<float >&sort_key,thrust::device_vector<int> &node_index, thrust::device_vector<int >&classes,thrust::device_vector<int >&tmp_classes,
+void calculate_infogain(int n, cub::DoubleBuffer<int> &db_sample_index, thrust::host_vector<thrust::device_vector<float >> &attributes, cub::DoubleBuffer<float >&db_sort_key,thrust::device_vector<int> &node_index, thrust::device_vector<int >&classes,thrust::device_vector<int >&tmp_classes,
 	thrust::device_vector<int > & node_positive_count,
 	thrust::device_vector<int > & node_total_count,
 	thrust::device_vector<int > & node_start_index,
 	thrust::device_vector<int >& node_best_infogain_index,
 	 TreeNode*d_current_nodes,
 	int attribute,
-	int n_nodes){
+	int n_nodes,
+	void *d_temp_storage,
+	size_t temp_storage_bytes
+	){
 	
 	
 	//Make iterators
 	auto discard = thrust::make_discard_iterator();
 	auto counting = thrust::make_counting_iterator<int >(0);
 	auto constant_one = thrust::make_constant_iterator<int >(1);
-	auto node_positive_count_perm = thrust::make_permutation_iterator(node_positive_count.begin(), node_index.begin());
-	auto node_total_count_perm = thrust::make_permutation_iterator(node_total_count.begin(), node_index.begin());
-	auto node_start_index_perm = thrust::make_permutation_iterator(node_start_index.begin(), node_index.begin());
-	
-	//Copy in sort key
-	thrust::gather(sample_index.begin(), sample_index.end(), attributes[attribute].begin(), sort_key.begin());
 
-	//Two level segmented sort
-	thrust::stable_sort_by_key(sort_key.begin(), sort_key.end(), thrust::make_zip_iterator(thrust::make_tuple(sample_index.begin(), node_index.begin())));
-	thrust::stable_sort_by_key(node_index.begin(), node_index.end(), thrust::make_zip_iterator(thrust::make_tuple(sample_index.begin(), sort_key.begin())));
+	//Copy in sort key
+	thrust::gather(dptr(db_sample_index.Current()), dptr(db_sample_index.Current()) + n, attributes[attribute].begin(), dptr(db_sort_key.Current()));
+
+	// Segmented sort
+	cub::DeviceSegmentedRadixSort::SortPairs(d_temp_storage, temp_storage_bytes, db_sort_key, db_sample_index, n, n_nodes, raw( node_start_index), raw( node_start_index)+1);
 
 	//Copy in class
-	thrust::gather(sample_index.begin(), sample_index.end(), classes.begin(), tmp_classes.begin());
+	thrust::gather(dptr(db_sample_index.Current()), dptr(db_sample_index.Current()) + n, classes.begin(), tmp_classes.begin());
 
-	//Count total & positives
-	thrust::reduce_by_key(node_index.begin(), node_index.end(), tmp_classes.begin(), discard, node_positive_count.begin());
-	thrust::reduce_by_key(node_index.begin(), node_index.end(), constant_one, discard, node_total_count.begin());
-
-	//Get start indexes
-	thrust::exclusive_scan(node_total_count.begin(), node_total_count.end(), node_start_index.begin());
+	//Count positives
+	//thrust::reduce_by_key(node_index.begin(), node_index.end(), tmp_classes.begin(), discard, node_positive_count.begin());
+	cub::DeviceSegmentedReduce::Sum(d_temp_storage,temp_storage_bytes,raw(tmp_classes),raw( node_positive_count),n_nodes,raw(node_start_index), raw(node_start_index)+1);
 
 	//Scan classes
 	thrust::exclusive_scan_by_key(node_index.begin(), node_index.end(), tmp_classes.begin(), tmp_classes.begin());
 
 	//Calculate infogain
 	int *d_tmp_classes = raw(tmp_classes);
+	int *d_node_index = raw(node_index);
+	int *d_node_offsets = raw(node_start_index);
+	int *d_node_positive_count = raw(node_positive_count);
 
 	auto infogain = [=]__device__(int i){
-		int node_total = node_total_count_perm[i];
-		int node_positive = node_positive_count_perm[i];
-		int node_i = i - node_start_index_perm[i];
+		//Current node of the tree we are in
+		int node = d_node_index[i];
+
+		//Total instances in this node
+		int node_total = d_node_offsets[node+1]-d_node_offsets[node];
+
+		//Total positive instances in this node
+		int node_positive = d_node_positive_count[node];
+
+		//Our current position within this node
+		int node_i = i - d_node_offsets[node];
+
 		float node_entropy = entropy(node_positive, node_total);
 
 		int left_positive = d_tmp_classes[i];
@@ -71,27 +80,14 @@ void calculate_infogain(thrust::device_vector<int >& sample_index, thrust::host_
 		float entropy_left = entropy(left_positive, left_negative + left_positive);
 		float entropy_right = entropy(right_positive, right_negative + right_positive);
 
-		float ig = node_entropy - ((float)node_i / node_total) * entropy_left - ((float)(node_total - node_i) / node_total) * entropy_right;
+		return node_entropy - ((float)node_i / node_total) * entropy_left - ((float)(node_total - node_i) / node_total) * entropy_right;
 
-		/*
-		if ((i == 18|| i == 19) && attribute == 1){
-			printf("left pos: %d\n", left_positive);
-			printf("left neg: %d\n", left_negative);
-			printf("right pos: %d\n", right_positive);
-			printf("right neg: %d\n", right_negative);
-			printf("entropy  left: %1.2f\n", entropy_left);
-			printf("entropy right: %1.2f\n", entropy_right);
-			printf("node entropy: %1.2f\n",  node_entropy);
-			printf("Infogain: %1.2f\n",  ig);
-		}
-		*/
-
-		return ig;
 	};
 
 	//Get best infogain index for each node
 	//Additionally we may not select a split point in the middle of a cluster of same valued attributes
-	float *d_sort_key = raw(sort_key);
+
+	float *d_sort_key = db_sort_key.Current();
 	thrust::reduce_by_key(node_index.begin(), node_index.end(), counting, discard, node_best_infogain_index.begin(), thrust::equal_to<int>(), [=]__device__(int i1, int i2){
 
 		//Ensure a same valued attribute never gets returned ahead of a non-same valued attribute
@@ -108,6 +104,7 @@ void calculate_infogain(thrust::device_vector<int >& sample_index, thrust::host_
 
 		return infogain(i1) < infogain(i2) ? i2 : i1;
 	});
+
 
 	// Debugging
 	/*
@@ -147,4 +144,5 @@ void calculate_infogain(thrust::device_vector<int >& sample_index, thrust::host_
 			d_current_nodes[i] = TreeNode(attribute, attribute_split, contender_infogain);
 		}
 	});
+
 }
