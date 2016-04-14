@@ -174,13 +174,11 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
   </ItemDefinitionGroup>
   <ItemGroup>
     <CudaCompile Include="cuda_helpers.cu" />
-    <CudaCompile Include="infogain.cu" />
     <CudaCompile Include="kernel.cu" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cuda_helpers.cuh" />
     <ClInclude Include="data.h" />
-    <ClInclude Include="infogain.cuh" />
     <ClInclude Include="TreeNode.h" />
   </ItemGroup>
   <ItemGroup>

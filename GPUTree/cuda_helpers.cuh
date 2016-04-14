@@ -35,7 +35,7 @@ struct Timer{
 		return ((double)clock() - start) / CLOCKS_PER_SEC;
 	}
 	void printElapsed(char * label){
-		safe_cuda(cudaDeviceSynchronize());
+		cudaDeviceSynchronize();
 		std::cout << label << ": " << elapsed() << "s\n";
 	}
 
@@ -44,8 +44,9 @@ struct Timer{
 template <typename T>
 void print(const thrust::device_vector<T>& v)
 {
-	for (auto elem : v)
-		std::cout << " " << (int)elem;
+	thrust::host_vector<T> h = v;
+	for (auto elem : h)
+		std::cout << " " << elem;
 	std::cout << "\n";
 }
 
@@ -55,7 +56,7 @@ void print(char *label, const thrust::device_vector<T>& v, const char * format =
 	thrust::host_vector<T> h_v = v;
 
 	std::cout << label << ":\n";
-	for (int i = 0; i < max; i++)
+	for (int i = 0; i < std::min((int)h_v.size(), max); i++)
 	{
 		printf(format, h_v[i]);
 	}
