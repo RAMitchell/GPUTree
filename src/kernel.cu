@@ -320,6 +320,7 @@ int main(int argc, char **argv)
 
 	if (argc != 3){
 		std::cout << "usage: GPUTree.exe <filename.arff> <n levels>\n";
+		return 0;
 	}
 
 	std::string filename(argv[1]);
