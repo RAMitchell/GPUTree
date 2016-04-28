@@ -5,12 +5,17 @@ find_package(CUDA QUIET REQUIRED)
 
 set(CUDA_NVCC_FLAGS "--expt-extended-lambda") 
 
-# Specify binary name and source file to build it from
+FILE(GLOB SOURCES src/*)
+
 cuda_add_executable(
 	GPUTree
-	src/kernel.cu
-	src/data.cpp
-	src/cuda_helpers.cu
-	src/TreeNode.cpp
+	${SOURCES}
 )
+
+cuda_add_library(
+	GPUTreelib
+	SHARED
+	${SOURCES}
+)
+
 

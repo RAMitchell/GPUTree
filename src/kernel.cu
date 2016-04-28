@@ -156,7 +156,7 @@ void infogainSplit(Data&data, int n_levels){
 	thrust::device_vector<int >  node_positive_count(max_nodes);
 	thrust::device_vector< int  >  node_best_infogain_index(max_nodes);
 
-	//Node offsets
+	//node offsets
 	thrust::device_vector<int > node_offsets(max_nodes + 1, n);
 	node_offsets[0] = 0;
 
