@@ -6,6 +6,7 @@
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 #include <ctime>
+#include <algorithm>
 
 #define safe_cuda(ans) { throw_on_cuda_error((ans), __FILE__, __LINE__); }
 
@@ -23,6 +24,7 @@ thrust::device_ptr<T> dptr(T*d_ptr){
 	return thrust::device_pointer_cast(d_ptr);
 }
 
+#define NTIMERS
 struct Timer{
 	size_t start;
 	Timer(){
@@ -35,8 +37,10 @@ struct Timer{
 		return ((double)clock() - start) / CLOCKS_PER_SEC;
 	}
 	void printElapsed(char * label){
+#ifndef NTIMERS
 		cudaDeviceSynchronize();
 		std::cout << label << ": " << elapsed() << "s\n";
+#endif
 	}
 
 };
