@@ -18,7 +18,8 @@ void printTreeRecurse(std::vector< TreeNode> &tree, int index, int level, data&d
 
 	}
 	else{
-		std::cout << "<" << d.attribute_names[tree[index].attributeIndex] << ", " << tree[index].attributeValue << ", " << tree[index].infogain << ">\n";
+		std::cout << "<" << d.attribute_names[tree[index].attributeIndex] << ", " << tree[index].attributeValue << ", " << tree[index].infogain << ", (";
+		printf("%1.2f,%1.2f)>\n", tree[index].left_prob, tree[index].right_prob);
 	}
 
 	printTreeRecurse(tree, index * 2 + 1, level + 1,d);
@@ -28,7 +29,7 @@ void printTreeRecurse(std::vector< TreeNode> &tree, int index, int level, data&d
 }
 
 void printTree(std::vector<TreeNode> &tree, data&d){
-	std::cout << "<attribute, attribute value, infogain>\n";
+	std::cout << "<attribute, attribute value, infogain, (left_prob, right_prob)>\n";
 	printTreeRecurse(tree, 0, 0,d);
 }
 
@@ -48,17 +49,12 @@ int main(int argc, char **argv)
 
 	data d(filename);
 
-	double ** all_attributes = new double*[d.attributes.size()];
-	for (int i = 0; i < d.attributes.size(); i++){
-		all_attributes[i] = d.attributes[i].data();
-	}
-
 	int max_nodes = std::pow(2, n_levels) - 1;
 	std::vector<TreeNode> tree(max_nodes);
 
 	try{
 		Timer t;
-		generate_tree_weka( all_attributes, d.attributes.size(), d.attributes[0].size(), d.class_index, n_levels, tree.data());
+		generate_tree( d.attributes_compacted.data(), d.attributes.size(),d.classes.data(), d.attributes[0].size(), n_levels, tree.data());
 		cudaDeviceSynchronize();
 		t.printElapsed("Tree build time");
 	}
@@ -68,8 +64,6 @@ int main(int argc, char **argv)
 	}
 
 	printTree(tree, d);
-
-	delete[]  all_attributes;
 
 	return 0;
 }
