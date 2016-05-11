@@ -38,7 +38,7 @@ struct Timer{
 	}
 	void printElapsed(char * label){
 #ifndef NTIMERS
-		cudaDeviceSynchronize();
+		safe_cuda(cudaDeviceSynchronize());
 		std::cout << label << ": " << elapsed() << "s\n";
 #endif
 	}

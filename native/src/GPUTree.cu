@@ -21,7 +21,22 @@ struct  InfoReduce{
 
 	__device__ CUB_RUNTIME_FUNCTION __forceinline__
 	int operator()(const int & i1, const int &i2)const {
-		return d_info[i1] > d_info[i2] ? i1 : i2;
+		if (i1 == -1 && i2 == -1)
+		{
+			return  -1;
+		}
+
+		else if (i1 == -1)
+		{
+			return i2;
+		}
+		else if (i2 == -1)
+		{
+			return i1;
+		}
+		else{
+			return d_info[i1] > d_info[i2] ? i1 : i2;
+		}
 	}
 };
 
@@ -168,7 +183,6 @@ EXPORT int  generate_tree(const float * in_attributes,const  int n_attributes, c
 
 		//Copy in class
 		thrust::gather(sort_order.begin(), sort_order.end(), classes.begin(), tmp_classes.begin());
-
 		t.printElapsed("gather");
 		t.reset();
 
@@ -205,9 +219,10 @@ EXPORT int  generate_tree(const float * in_attributes,const  int n_attributes, c
 		float *d_info = raw(info);
 
 		InfoReduce  reduce_op(d_info);
-		cub::DeviceSegmentedReduce::Reduce(d_temp_storage, temp_storage_bytes, raw(indices), raw(node_best_infogain_index), n_nodes, raw(node_offsets), raw(node_offsets) + 1, reduce_op, -1);
+		cub::DeviceSegmentedReduce::Reduce(d_temp_storage, temp_storage_bytes, raw(indices), raw(node_best_infogain_index), n_nodes, raw(node_offsets), raw(node_offsets) + 1, reduce_op,  - 1);
 		t.printElapsed("infogain reduce");
-		t.reset();
+		t.reset();		
+		
 
 		//Create a node for best splits
 		int *d_node_best_infogain_index = raw(node_best_infogain_index);
@@ -245,8 +260,8 @@ EXPORT int  generate_tree(const float * in_attributes,const  int n_attributes, c
 
 			d_current_nodes[i] = TreeNode(attribute_index, attribute_split, d_info[best_index],left_prob, right_prob);
 
-		});
-
+		});		
+		
 
 		//Exit the loop here if we are done - don't bother preparing data structures for next loop
 		if (level == n_levels - 1){
@@ -276,7 +291,7 @@ EXPORT int  generate_tree(const float * in_attributes,const  int n_attributes, c
 			}
 
 		});
-	
+
 		t.printElapsed("prepare sort key");
 		t.reset();
 		//Use tmp_classes as the input array to sort
@@ -349,9 +364,7 @@ EXPORT int  generate_tree(const float * in_attributes,const  int n_attributes, c
 	EXPORT bool test_cuda(){
 		int device_count;
 		cudaError_t e = cudaGetDeviceCount(&device_count);
-		if (e == cudaSuccess){
-			//Force cuda initialisation
-			safe_cuda(cudaFree(0));
+		if (e == cudaSuccess&&device_count>0){
 			return true;
 		}
 		else{
@@ -359,4 +372,8 @@ EXPORT int  generate_tree(const float * in_attributes,const  int n_attributes, c
 		}
 	}
 
+	EXPORT void force_context_init(){
+		safe_cuda(cudaFree(0));
+		safe_cuda(cudaDeviceSynchronize());
+	}
 }

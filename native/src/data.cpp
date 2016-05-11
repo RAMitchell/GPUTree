@@ -96,6 +96,7 @@ void data::loadARFF(std::string name, int maxItems){
 	}
 	else{
 		std::cerr << "Unable to open file " << name << "\n";
+		exit(-1);
 	}
 
 }

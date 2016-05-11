@@ -53,7 +53,7 @@ int main(int argc, char **argv)
 	std::vector<TreeNode> tree(max_nodes);
 
 	try{
-		Timer t;
+		Timer t; 
 		generate_tree( d.attributes_compacted.data(), d.attributes.size(),d.classes.data(), d.attributes[0].size(), n_levels, tree.data());
 		cudaDeviceSynchronize();
 		t.printElapsed("Tree build time");

@@ -33,7 +33,9 @@ extern "C"{
 	EXPORT int  generate_tree(const float * in_attributes, const int n_attributes, const char * in_classes, const int n_instances, const int n_levels, TreeNode*out_tree);
 
 	//Tests for the presence of a Nvidia GPU
-	//Also forces initialisation of the cuda runtime
 	EXPORT bool test_cuda();
+	
+	//Call a dummy cuda function to force run-time initialisation
+	EXPORT void force_context_init();
 }
 
