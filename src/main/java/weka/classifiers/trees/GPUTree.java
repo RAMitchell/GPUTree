@@ -1,6 +1,7 @@
 package weka.classifiers.trees;
 
 import com.sun.jna.Memory;
+import weka.classifiers.rules.ZeroR;
 import weka.core.*;
 import weka.core.Capabilities.Capability;
 import weka.classifiers.AbstractClassifier;
@@ -16,6 +17,8 @@ import java.util.Arrays;
  * Created by R on 17/04/2016.
  */
 public class GPUTree extends AbstractClassifier {
+
+    private static final long serialVersionUID = -1775960263491961836L;
 
     /**
      * Native library definitions
@@ -56,6 +59,9 @@ public class GPUTree extends AbstractClassifier {
 
     /** Attribute names. Used by toString() */
     String[] m_AttributeNames;
+
+    /** ZeroR model that is used if no attributes are present. */
+    protected ZeroR m_zeroR;
 
     /**
      * Preload the cuda run-time
@@ -104,6 +110,17 @@ public class GPUTree extends AbstractClassifier {
         // remove instances with missing class
         instances = new Instances(instances);
         instances.deleteWithMissingClass();
+
+        if( instances.size() == 0 ){
+            return;
+        }
+
+        m_zeroR = null;
+        if (instances.numAttributes() == 1) {
+            m_zeroR = new ZeroR();
+            m_zeroR.buildClassifier(instances);
+            return;
+        }
 
         //Store attribute names
         m_AttributeNames = new String[instances.numAttributes() - 1];
@@ -177,6 +194,9 @@ public class GPUTree extends AbstractClassifier {
 
     @Override
     public String toString() {
+        if(m_Tree == null){
+            return "";
+        }
         return toStringRecurse(0,0);
     }
 
@@ -243,12 +263,25 @@ public class GPUTree extends AbstractClassifier {
     public double[] distributionForInstance(Instance instance)
             throws Exception {
 
+        if(m_zeroR != null){
+            return m_zeroR.distributionForInstance(instance);
+        }
+
         double[] probs = new double[2];
 
-        probs[1] = distributionRecurse(instance,0);
+        if(m_Tree  == null){
+            probs[1] = 0.5;
+        }
+        else{
+            probs[1] = distributionRecurse(instance,0);
+        }
         probs[0] = 1 - probs[1];
 
         return probs;
+    }
+
+    public String globalInfo(){
+        return "Fast GPU decision tree classifier.";
     }
 
     /**
