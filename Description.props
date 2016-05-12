@@ -1,0 +1,33 @@
+# Package name (required)
+PackageName=GPUTree
+
+# Version (required)
+Version=1.0.0
+
+#Date (year-month-day)
+Date=2016-05-12
+
+# Title (required)
+Title=GPUTree
+
+# Category (recommended)
+Category=Classification
+
+# Author (required)
+Author=Rory Mitchell <r.a.mitchell.nz@gmail.com>
+
+# Maintainer (required)
+Maintainer=Rory Mitchell <r.a.mitchell.nz@gmail.com>
+
+# License (required)
+License=GPL 2.0|Mozilla
+
+# Description (required)
+Description=Fast decision tree classification algorithm. Requires a CUDA capable GPU.
+
+# Package URL for obtaining the package archive (required)
+PackageURL=asd
+
+# Dependencies
+Depends=weka (>=3.8.0)
+

@@ -8,13 +8,14 @@ import weka.classifiers.AbstractClassifier;
 
 import com.sun.jna.*;
 
+import java.io.Serializable;
 import java.util.Enumeration;
 import java.util.Vector;
 import java.util.List;
 import java.util.Arrays;
 
 /**
- * Created by R on 17/04/2016.
+ * Created by Rory Mitchell on 17/04/2016.
  */
 public class GPUTree extends AbstractClassifier {
 
@@ -24,9 +25,13 @@ public class GPUTree extends AbstractClassifier {
      * Native library definitions
      */
     public interface CLibrary extends Library {
-    CLibrary clib = (CLibrary) Native.loadLibrary("lib/GPUTree", CLibrary.class);
 
-        public static class TreeNode extends Structure {
+    CLibrary clib = (CLibrary) Native.loadLibrary(WekaPackageManager. PACKAGES_DIR.toString() + "/GPUTree/lib/GPUTree", CLibrary.class);
+
+
+        public static class TreeNode extends Structure implements Serializable{
+
+            private static final long serialVersionUID = 6889219211806337654L;
 
             public static class ByReference extends TreeNode implements Structure.ByReference {
             }
