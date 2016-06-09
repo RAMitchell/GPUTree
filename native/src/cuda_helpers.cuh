@@ -12,6 +12,32 @@
 
 void throw_on_cuda_error(cudaError_t code, const char *file, int line);
 
+//Keep track of cub library device allocation
+struct CubMemory
+{
+	void* d_temp_storage;
+	size_t temp_storage_bytes;
+
+	CubMemory()
+		: d_temp_storage(NULL),
+		  temp_storage_bytes(0)
+	{
+	}
+
+	~CubMemory()
+	{
+		if (d_temp_storage != NULL)
+		{
+			safe_cuda(cudaFree(d_temp_storage));
+		}
+	}
+
+	void allocate()
+	{
+		safe_cuda(cudaMalloc(&d_temp_storage, temp_storage_bytes));
+	}
+};
+
 __device__ int tid();
 
 //Utility function: rounds up integer division.

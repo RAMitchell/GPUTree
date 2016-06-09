@@ -8,7 +8,6 @@ import junit.framework.Test;
 import junit.framework.TestSuite;
 import weka.core.Instance;
 import weka.core.Instances;
-import weka.datagenerators.DataGenerator;
 import weka.datagenerators.classifiers.classification.RDG1;
 
 /**
@@ -35,8 +34,9 @@ public class GPUTreeTest extends AbstractClassifierTest {
         //Number runs to warm up JIT compiler
         final int hotspotIterations = 2;
 
-        final int nAttributes = 10;
+        final int nAttributes = 8;
         final int maxLevels = 4;
+         final int numClass = 3;
 
         System.out.println("Levels, Instances, GPUTree, REPTree, speedup");
 
@@ -48,9 +48,9 @@ public class GPUTreeTest extends AbstractClassifierTest {
             generator.setNumAttributes(nAttributes);
             generator.setNumNumeric(nAttributes);
             generator.setNumExamples(nExamples);
+            generator.setNumClasses(numClass);
             generator.defineDataFormat();
             Instances instances = generator.generateExamples();
-
 
             GPUTree gpuTree = new GPUTree();
             long gpuElapsed = 0;
@@ -107,6 +107,31 @@ public class GPUTreeTest extends AbstractClassifierTest {
         }
     }
 
+    /**
+     * Run classifier on very small data set.
+     *
+     * Useful for printing out variables to check output
+     * @throws Exception
+     */
+
+    public static void smallTest() throws Exception {
+
+        //Generate random instances
+        RDG1 generator = new RDG1();
+        generator.setMaxRuleSize(50);
+        generator.setNumAttributes(2);
+        generator.setNumNumeric(2);
+        generator.setNumExamples(10);
+        generator.defineDataFormat();
+        generator.setSeed(23);
+        Instances instances = generator.generateExamples();
+
+        GPUTree gpuTree = new GPUTree();
+        gpuTree.setMaxDepth(3);
+        gpuTree.preExecution();
+        gpuTree.buildClassifier(instances);
+    }
+
     public static Test suite() {
         return new TestSuite(GPUTreeTest.class);
     }
@@ -115,6 +140,7 @@ public class GPUTreeTest extends AbstractClassifierTest {
     public static void main(String[] args) throws Exception {
         junit.textui.TestRunner.run(suite());
         benchmark();
+        //smallTest();
     }
 
 }

@@ -5,6 +5,11 @@ find_package(CUDA QUIET REQUIRED)
 
 set(CUDA_NVCC_FLAGS "--expt-extended-lambda") 
 
+set( CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${PROJECT_SOURCE_DIR}/../lib)
+set( CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE ${PROJECT_SOURCE_DIR}/../lib)
+set( CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${PROJECT_SOURCE_DIR}/../lib)
+set( CMAKE_LIBRARY_OUTPUT_DIRECTORY_DEBUG ${PROJECT_SOURCE_DIR}/../lib)
+
 set(SOURCES 
 	src/cuda_helpers.cu
 	src/cuda_helpers.cuh
@@ -19,10 +24,10 @@ set(EXE_SOURCES
 	src/data.h
 )
 
-cuda_add_executable(
-	GPUTreeApp
-	${EXE_SOURCES}
-)
+#cuda_add_executable(
+#	GPUTreeApp
+#	${EXE_SOURCES}
+#	)
  
 
 cuda_add_library(
@@ -31,4 +36,5 @@ cuda_add_library(
 	${SOURCES}
 )
 
-SET(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/../lib)
+
+

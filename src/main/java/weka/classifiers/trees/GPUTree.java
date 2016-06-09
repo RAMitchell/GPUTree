@@ -26,10 +26,9 @@ public class GPUTree extends AbstractClassifier {
      */
     public interface CLibrary extends Library {
 
-    CLibrary clib = (CLibrary) Native.loadLibrary(WekaPackageManager. PACKAGES_DIR.toString() + "/GPUTree/lib/GPUTree", CLibrary.class);
+        CLibrary clib = (CLibrary) Native.loadLibrary(WekaPackageManager.PACKAGES_DIR.toString() + "/GPUTree/lib/GPUTree", CLibrary.class);
 
-
-        public static class TreeNode extends Structure implements Serializable{
+        class TreeNode extends Structure implements Serializable {
 
             private static final long serialVersionUID = 6889219211806337654L;
 
@@ -38,42 +37,87 @@ public class GPUTree extends AbstractClassifier {
 
             public int attributeIndex;
             public float attributeValue;
-            public float infogain;
-            public float leftProb;
-            public float rightProb;
+            public Pointer distribution;
+            public Pointer  counts;
+
+            /**
+             * Allocate memory for native code to store distribution
+             *
+             * @param numValues Number of values class attribute can take
+             */
+            public void allocateDistribution(int numValues) {
+                distribution = new Memory(numValues * Native.getNativeSize(Float.TYPE));
+            }
+            /**
+             * Allocate memory for native code to store counts
+             *
+             * @param numValues Number of values class attribute can take
+             */
+            public void allocateCounts(int numValues) {
+                 counts = new Memory(numValues * Native.getNativeSize(Integer.TYPE));
+            }
+
+            public double[] getDistribution(int numValues) {
+                double[] dist = new double[numValues];
+                for (int i = 0; i < numValues; i++) {
+                    dist[i] = distribution.getFloat(i * Native.getNativeSize(Float.TYPE));
+                }
+
+                return dist;
+            }
+
+            public int sumCounts(int numValues){
+                int sum = 0;
+                for (int i = 0; i < numValues; i++) {
+                    sum  += counts.getInt(i * Native.getNativeSize(Integer.TYPE));
+                }
+                return sum;
+            }
 
             @Override
             protected List getFieldOrder() {
-                return Arrays.asList("attributeIndex", "attributeValue", "infogain", "leftProb", "rightProb");
+                return Arrays.asList("attributeIndex", "attributeValue","distribution","counts");
             }
         }
 
         boolean test_cuda();
 
-        void  force_context_init();
+        void force_context_init();
 
-        int generate_tree(Pointer in_attributes, int n_attributes, Pointer in_classes, int n_instances, int n_levels, TreeNode.ByReference out_tree);
+        int generate_tree(Pointer in_attributes, int n_attributes, Pointer in_classes, int n_instances, int n_class_values, int n_levels, TreeNode.ByReference out_tree);
 
     }
 
-    /** Upper bound on the tree depth */
+    /**
+     * Upper bound on the tree depth
+     */
     protected int m_MaxDepth = 3;
 
-    /** The decision tree */
+    /**
+     * Number of nominal class values
+     */
+    protected int m_NumClasses = 0;
+    /**
+     * The decision tree
+     */
     CLibrary.TreeNode[] m_Tree;
 
-    /** Attribute names. Used by toString() */
-    String[] m_AttributeNames;
+    /**
+     * Attribute names. Used by toString()
+     */
+    protected String[] m_AttributeNames;
 
-    /** ZeroR model that is used if no attributes are present. */
+    /**
+     * ZeroR model that is used if no attributes are present.
+     */
     protected ZeroR m_zeroR;
 
     /**
      * Preload the cuda run-time
      */
     @Override
-    public void preExecution(){
-        if(CLibrary.clib.test_cuda()) {
+    public void preExecution() {
+        if (CLibrary.clib.test_cuda()) {
             CLibrary.clib.force_context_init();
         }
     }
@@ -92,7 +136,7 @@ public class GPUTree extends AbstractClassifier {
         result.enable(Capability.NUMERIC_ATTRIBUTES);
 
         // class
-        result.enable(Capability.BINARY_CLASS);
+        result.enable(Capability.NOMINAL_CLASS);
         result.enable(Capability.MISSING_CLASS_VALUES);
 
         // instances
@@ -103,6 +147,8 @@ public class GPUTree extends AbstractClassifier {
 
 
     public void buildClassifier(Instances instances) throws Exception {
+
+        m_NumClasses = instances.numClasses();
 
         //Is there a cuda capable GPU?
         if (!CLibrary.clib.test_cuda()) {
@@ -116,7 +162,7 @@ public class GPUTree extends AbstractClassifier {
         instances = new Instances(instances);
         instances.deleteWithMissingClass();
 
-        if( instances.size() == 0 ){
+        if (instances.size() == 0) {
             return;
         }
 
@@ -130,8 +176,8 @@ public class GPUTree extends AbstractClassifier {
         //Store attribute names
         m_AttributeNames = new String[instances.numAttributes() - 1];
         int counter = 0;
-        for(int i = 0; i < instances.numAttributes() - 1; i++){
-            if(i != instances.classIndex()){
+        for (int i = 0; i < instances.numAttributes() - 1; i++) {
+            if (i != instances.classIndex()) {
                 m_AttributeNames[counter] = instances.attribute(i).name();
                 counter++;
             }
@@ -161,15 +207,34 @@ public class GPUTree extends AbstractClassifier {
         //Allocate memory for tree
         CLibrary.TreeNode.ByReference treeRef = new CLibrary.TreeNode.ByReference();
         m_Tree = (CLibrary.TreeNode[]) treeRef.toArray(maxNodes());
+        for (int i = 0; i < maxNodes(); i++) {
+            m_Tree[i].allocateDistribution(instances.numClasses());
+            m_Tree[i].allocateCounts(instances.numClasses());
+        }
 
         //Call native classifier
-        CLibrary.clib.generate_tree(attributes, instances.numAttributes() - 1, classes, instances.numInstances(), m_MaxDepth, treeRef);
+        CLibrary.clib.generate_tree(attributes, instances.numAttributes() - 1, classes, instances.numInstances(), instances.numClasses(), m_MaxDepth, treeRef);
 
     }
 
-    private String toStringRecurse(int index, int depth){
+    private String toStringLeaf(CLibrary.TreeNode node){
 
-        if( depth >= m_MaxDepth){
+        //Find most probable class
+        double max = 0;
+        int max_index = 0;
+        double dist[] = node.getDistribution(m_NumClasses);
+        for (int i = 0; i < m_NumClasses; i++) {
+            if (dist[i] > max) {
+                max = dist[i];
+                max_index = i;
+            }
+        }
+        return " : c" + max_index + " ("+ node.sumCounts(m_NumClasses) + "/" + (node.sumCounts(m_NumClasses) - node.counts.getInt(max_index * Native.getNativeSize(Integer.TYPE)))+")\n";
+    }
+
+    private String toStringRecurse(int index, int depth) {
+
+        if (depth > m_MaxDepth) {
             return "";
         }
 
@@ -177,21 +242,23 @@ public class GPUTree extends AbstractClassifier {
 
         CLibrary.TreeNode node = m_Tree[index];
 
-        if( node.attributeIndex  == -1){
-            return "";
+        if (node.attributeIndex == -1) {
+            return toStringLeaf(node);
         }
 
-        for(int i = 0; i < depth; i++) {
+        text.append("\n");
+
+        for (int i = 0; i < depth; i++) {
             text.append("|   ");
         }
-        text.append(m_AttributeNames[node.attributeIndex]  + " < "  + Utils.doubleToString(node.attributeValue,2) + "\n");
+        text.append(m_AttributeNames[node.attributeIndex] + " < " + Utils.doubleToString(node.attributeValue, 2));
 
         text.append(toStringRecurse(index * 2 + 1, depth + 1));
 
-        for(int i = 0; i < depth; i++) {
+        for (int i = 0; i < depth; i++) {
             text.append("|   ");
         }
-        text.append(m_AttributeNames[node.attributeIndex]  + " >= "  + Utils.doubleToString(node.attributeValue,2) + "\n");
+        text.append(m_AttributeNames[node.attributeIndex] + " >= " + Utils.doubleToString(node.attributeValue, 2));
         text.append(toStringRecurse(index * 2 + 2, depth + 1));
 
         return text.toString();
@@ -199,59 +266,54 @@ public class GPUTree extends AbstractClassifier {
 
     @Override
     public String toString() {
-        if(m_Tree == null){
+        if (m_Tree == null) {
             return "";
         }
-        return toStringRecurse(0,0);
+        return toStringRecurse(0, 0);
     }
 
     /**
-     * @return  Maximum number of nodes our binary tree can contain
+     * @return Maximum number of nodes our binary tree can contain
      */
-     private int maxNodes(){
-         return (1<<m_MaxDepth) - 1;
-     }
+    private int maxNodes() {
+        return (1 << (m_MaxDepth + 1)) - 1;
+    }
 
     /**
      * Recursively traverses the tree for a given instance and returns the class probability.
+     *
      * @param instance
      * @param nodeIndex
      * @return Class probability
      */
-    private float distributionRecurse(Instance instance, int nodeIndex){
+    private double[] distributionRecurse(Instance instance, int nodeIndex) {
+
+        int nativeIndex = m_Tree[nodeIndex].attributeIndex;
+        if (nativeIndex == -1) {
+            return m_Tree[nodeIndex].getDistribution(instance.numClasses());
+        }
 
         float split = m_Tree[nodeIndex].attributeValue;
 
         //Account for the fact that our attribute index does not include the class
-        int nativeIndex = m_Tree[nodeIndex].attributeIndex;
-        int attributeIndex = nativeIndex< instance.classIndex()?nativeIndex:nativeIndex + 1;
+        int attributeIndex = nativeIndex < instance.classIndex() ? nativeIndex : nativeIndex + 1;
 
-        if( instance.value(attributeIndex) < split){
+        if (instance.value(attributeIndex) < split) {
             int nextIndex = nodeIndex * 2 + 1;
 
-            if( nextIndex >= maxNodes()){
-                return m_Tree[nodeIndex].leftProb;
-            }
-            else if(m_Tree[nextIndex].attributeIndex ==  - 1){
-                return m_Tree[nodeIndex].leftProb;
-            }
-            else{
+            if (nextIndex >= maxNodes()) {
+                return m_Tree[nodeIndex].getDistribution(instance.numClasses());
+            } else {
                 return distributionRecurse(instance, nextIndex);
             }
 
-
-        }
-        else{
+        } else {
 
             int nextIndex = nodeIndex * 2 + 2;
 
-            if( nextIndex >= maxNodes()){
-                return m_Tree[nodeIndex].rightProb;
-            }
-            else if(m_Tree[nextIndex].attributeIndex ==  - 1){
-                return m_Tree[nodeIndex].rightProb;
-            }
-            else{
+            if (nextIndex >= maxNodes()) {
+                return m_Tree[nodeIndex].getDistribution(instance.numClasses());
+            } else {
                 return distributionRecurse(instance, nextIndex);
             }
         }
@@ -268,24 +330,17 @@ public class GPUTree extends AbstractClassifier {
     public double[] distributionForInstance(Instance instance)
             throws Exception {
 
-        if(m_zeroR != null){
+        if (m_zeroR != null) {
             return m_zeroR.distributionForInstance(instance);
         }
 
-        double[] probs = new double[2];
-
-        if(m_Tree  == null){
-            probs[1] = 0.5;
+        if (m_Tree == null) {
+            return new double[instance.numClasses()];
         }
-        else{
-            probs[1] = distributionRecurse(instance,0);
-        }
-        probs[0] = 1 - probs[1];
-
-        return probs;
+        return distributionRecurse(instance, 0);
     }
 
-    public String globalInfo(){
+    public String globalInfo() {
         return "Fast GPU decision tree classifier.";
     }
 
